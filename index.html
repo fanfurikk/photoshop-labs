@@ -25,20 +25,45 @@
       </div>
     </div>
 
+    <div class="toolbar-sep"></div>
+
+    <div class="toolbar-group">
+      <button class="btn tool-btn" data-tool="hand" title="Рука (выбор инструмента не активен)">✋</button>
+      <button class="btn tool-btn" data-tool="eyedropper" title="Пипетка — кликните по изображению">💧</button>
+    </div>
+
     <div class="toolbar-group toolbar-title">
       <span id="file-name">Файл не выбран</span>
     </div>
   </header>
 
-  <main class="workspace">
-    <div class="canvas-wrap" id="canvas-wrap">
-      <canvas id="canvas"></canvas>
-      <div class="empty-hint" id="empty-hint">
-        Перетащите изображение сюда или нажмите «Открыть».<br />
-        Поддерживаются: PNG, JPG, GB7.
+  <div class="layout">
+    <main class="workspace">
+      <div class="canvas-wrap" id="canvas-wrap">
+        <canvas id="canvas"></canvas>
+        <div class="empty-hint" id="empty-hint">
+          Перетащите изображение сюда или нажмите «Открыть».<br />
+          Поддерживаются: PNG, JPG, GB7.
+        </div>
       </div>
-    </div>
-  </main>
+    </main>
+
+    <aside class="sidebar">
+      <section class="panel">
+        <h3 class="panel-title">Каналы</h3>
+        <div class="channels" id="channels">
+          <p class="panel-hint">Загрузите изображение, чтобы увидеть каналы.</p>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h3 class="panel-title">Пипетка</h3>
+        <div class="picker" id="picker">
+          <p class="panel-hint">Выберите инструмент «Пипетка» и кликните по изображению.</p>
+        </div>
+      </section>
+    </aside>
+  </div>
 
   <footer class="statusbar">
     <div class="status-item">
