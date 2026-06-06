@@ -37,6 +37,7 @@
     <div class="toolbar-group">
       <button class="btn" id="levels-btn" disabled>Уровни…</button>
       <button class="btn" id="resize-btn" disabled>Размер…</button>
+      <button class="btn" id="filter-btn" disabled>Фильтр…</button>
     </div>
 
     <div class="toolbar-group toolbar-title">
@@ -226,6 +227,54 @@
       <div class="dialog-actions">
         <button type="button" id="resize-cancel">Отмена</button>
         <button type="button" class="btn-primary" id="resize-apply">Применить</button>
+      </div>
+    </div>
+  </dialog>
+
+  <dialog id="filter-dialog" class="levels-dialog filter-dialog">
+    <div class="dialog-header">
+      <h2 class="dialog-title">Фильтрация (свёртка 3×3)</h2>
+      <button class="dialog-close" id="filter-close" type="button" aria-label="Закрыть">×</button>
+    </div>
+
+    <div class="dialog-body">
+      <div class="levels-row">
+        <label class="levels-field">
+          <span>Преднастройка</span>
+          <select id="filter-preset"></select>
+        </label>
+        <label class="levels-field">
+          <span>Края</span>
+          <select id="filter-edge">
+            <option value="copy">Копирование</option>
+            <option value="black">Чёрный</option>
+            <option value="white">Белый</option>
+          </select>
+        </label>
+      </div>
+
+      <div class="kernel-grid" id="kernel-grid"></div>
+
+      <div class="levels-row filter-channels-row">
+        <span class="filter-channels-label">Каналы:</span>
+        <label class="levels-field-check"><input type="checkbox" data-ch="R" checked />R</label>
+        <label class="levels-field-check"><input type="checkbox" data-ch="G" checked />G</label>
+        <label class="levels-field-check"><input type="checkbox" data-ch="B" checked />B</label>
+        <label class="levels-field-check"><input type="checkbox" data-ch="A" />A</label>
+      </div>
+
+      <div class="filter-status" id="filter-status"></div>
+    </div>
+
+    <div class="dialog-footer">
+      <label class="levels-field-check">
+        <input type="checkbox" id="filter-preview" checked />
+        Предпросмотр
+      </label>
+      <div class="dialog-actions">
+        <button type="button" id="filter-reset">Сброс</button>
+        <button type="button" id="filter-cancel">Отмена</button>
+        <button type="button" class="btn-primary" id="filter-apply">Применить</button>
       </div>
     </div>
   </dialog>

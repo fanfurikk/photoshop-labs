@@ -18,6 +18,7 @@ import { drawHistogram } from "./histogram.js";
 import { TripleSlider } from "./tripleSlider.js";
 import { INTERPOLATORS, resize } from "./resize.js";
 import { setupModal, openModal, closeModal } from "./modal.js";
+import { PRESETS as FILTER_PRESETS, startConvolution } from "./filter.js";
 
 const ZOOM_MIN = 0.12;
 const ZOOM_MAX = 3.0;
@@ -73,6 +74,17 @@ const els = {
   resizeInterpHelp: document.getElementById("resize-interp-help"),
   resizeInterpDescription: document.getElementById("resize-interp-description"),
   resizeError: document.getElementById("resize-error"),
+  filterBtn: document.getElementById("filter-btn"),
+  filterDialog: document.getElementById("filter-dialog"),
+  filterClose: document.getElementById("filter-close"),
+  filterPreset: document.getElementById("filter-preset"),
+  filterEdge: document.getElementById("filter-edge"),
+  filterPreview: document.getElementById("filter-preview"),
+  filterReset: document.getElementById("filter-reset"),
+  filterCancel: document.getElementById("filter-cancel"),
+  filterApply: document.getElementById("filter-apply"),
+  filterStatus: document.getElementById("filter-status"),
+  kernelGrid: document.getElementById("kernel-grid"),
 };
 
 const FORMAT_LABEL = { png: "PNG", jpg: "JPEG", gb7: "GB7" };
@@ -87,6 +99,7 @@ const state = {
   zoom: 1.0,
   interp: "bilinear",
   resizeDlg: null,
+  filter: null,
 };
 
 function setStatus(msg, isError = false) {
@@ -112,6 +125,9 @@ function leveledSourceRgba() {
   if (!state.original) return null;
   if (state.levels && state.levels.preview && !isAllIdentity(state.levels.settings)) {
     return applyLevels(state.original.rgba, state.levels.settings);
+  }
+  if (state.filter && state.filter.preview && state.filter.cached) {
+    return state.filter.cached;
   }
   return state.original.rgba;
 }
@@ -541,6 +557,222 @@ function onResizeDimInput(which) {
 els.resizeWidth.addEventListener("input", () => onResizeDimInput("w"));
 els.resizeHeight.addEventListener("input", () => onResizeDimInput("h"));
 
+function fmtKernel(v) {
+  return parseFloat(v.toPrecision(5)).toString();
+}
+
+function populateFilterPresets() {
+  els.filterPreset.innerHTML = "";
+  for (const [key, p] of Object.entries(FILTER_PRESETS)) {
+    const opt = document.createElement("option");
+    opt.value = key;
+    opt.textContent = p.label;
+    els.filterPreset.appendChild(opt);
+  }
+}
+
+function buildKernelGrid() {
+  els.kernelGrid.innerHTML = "";
+  for (let i = 0; i < 9; i++) {
+    const input = document.createElement("input");
+    input.type = "number";
+    input.step = "any";
+    input.dataset.i = String(i);
+    input.addEventListener("change", () => {
+      if (!state.filter) return;
+      const v = parseFloat(input.value);
+      if (!Number.isFinite(v)) {
+        input.value = fmtKernel(state.filter.kernel[i]);
+        return;
+      }
+      state.filter.kernel[i] = v;
+      els.filterPreset.value = "";
+      schedulePreview();
+    });
+    els.kernelGrid.appendChild(input);
+  }
+}
+
+function setKernelInputs(kernel) {
+  const inputs = els.kernelGrid.querySelectorAll("input");
+  inputs.forEach((inp, i) => { inp.value = fmtKernel(kernel[i] ?? 0); });
+}
+
+function getEnabledFilterChannels() {
+  const out = [];
+  els.filterDialog.querySelectorAll('[data-ch]').forEach((cb) => {
+    if (cb.checked) out.push(cb.dataset.ch);
+  });
+  return out;
+}
+
+function setFilterStatus(msg, busy = false) {
+  els.filterStatus.textContent = msg || "";
+  els.filterStatus.classList.toggle("busy", busy);
+}
+
+let filterJob = null;
+function cancelFilterJob() {
+  if (filterJob) {
+    filterJob.cancelled = true;
+    filterJob = null;
+  }
+}
+
+function schedulePreview() {
+  if (!state.filter || !state.original) return;
+  if (!state.filter.preview) {
+    cancelFilterJob();
+    state.filter.cached = null;
+    rerender();
+    return;
+  }
+  const channels = getEnabledFilterChannels();
+  if (channels.length === 0) {
+    cancelFilterJob();
+    state.filter.cached = null;
+    rerender();
+    setFilterStatus("Не выбран ни один канал");
+    return;
+  }
+  cancelFilterJob();
+  setFilterStatus("Вычисление…", true);
+  const { width, height, rgba } = state.original;
+  const kernel = state.filter.kernel.slice();
+  const edge = state.filter.edge;
+  filterJob = startConvolution(rgba, width, height, kernel, channels, edge, {
+    onProgress: (p) => {
+      setFilterStatus(`Вычисление… ${Math.round(p * 100)}%`, true);
+    },
+    onDone: (out) => {
+      filterJob = null;
+      state.filter.cached = out;
+      setFilterStatus("");
+      rerender();
+    },
+  });
+}
+
+function openFilterDialog() {
+  if (!state.original) return;
+  state.filter = {
+    preset: "identity",
+    kernel: [...FILTER_PRESETS.identity.kernel],
+    edge: "copy",
+    preview: true,
+    cached: null,
+  };
+  els.filterPreset.value = "identity";
+  els.filterEdge.value = "copy";
+  els.filterPreview.checked = true;
+  els.filterDialog.querySelectorAll('[data-ch]').forEach((cb) => {
+    cb.checked = cb.dataset.ch !== "A";
+  });
+  setKernelInputs(state.filter.kernel);
+  setFilterStatus("");
+  openModal(els.filterDialog);
+  schedulePreview();
+}
+
+function closeFilterDialog() {
+  cancelFilterJob();
+  state.filter = null;
+  setFilterStatus("");
+  closeModal(els.filterDialog);
+  rerender();
+}
+
+function applyFilterToImage() {
+  if (!state.filter || !state.original) return;
+  const channels = getEnabledFilterChannels();
+  if (channels.length === 0) {
+    setFilterStatus("Не выбран ни один канал");
+    return;
+  }
+  els.filterApply.disabled = true;
+  els.filterReset.disabled = true;
+  els.filterCancel.disabled = true;
+  els.filterClose.disabled = true;
+  setFilterStatus("Применение…", true);
+
+  cancelFilterJob();
+  const { width, height, rgba } = state.original;
+  const kernel = state.filter.kernel.slice();
+  const edge = state.filter.edge;
+
+  filterJob = startConvolution(rgba, width, height, kernel, channels, edge, {
+    onProgress: (p) => setFilterStatus(`Применение… ${Math.round(p * 100)}%`, true),
+    onDone: (out) => {
+      filterJob = null;
+      state.original = { ...state.original, rgba: out };
+      els.filterApply.disabled = false;
+      els.filterReset.disabled = false;
+      els.filterCancel.disabled = false;
+      els.filterClose.disabled = false;
+      renderChannelsPanel();
+      closeFilterDialog();
+      setStatus("Фильтр применён");
+    },
+  });
+}
+
+setupModal(els.filterDialog, { onClose: closeFilterDialog });
+
+els.filterBtn.addEventListener("click", openFilterDialog);
+els.filterClose.addEventListener("click", closeFilterDialog);
+els.filterCancel.addEventListener("click", closeFilterDialog);
+els.filterApply.addEventListener("click", applyFilterToImage);
+
+els.filterReset.addEventListener("click", () => {
+  if (!state.filter) return;
+  state.filter.preset = "identity";
+  state.filter.kernel = [...FILTER_PRESETS.identity.kernel];
+  state.filter.edge = "copy";
+  els.filterPreset.value = "identity";
+  els.filterEdge.value = "copy";
+  els.filterDialog.querySelectorAll('[data-ch]').forEach((cb) => {
+    cb.checked = cb.dataset.ch !== "A";
+  });
+  setKernelInputs(state.filter.kernel);
+  schedulePreview();
+});
+
+els.filterPreset.addEventListener("change", (e) => {
+  if (!state.filter) return;
+  const key = e.target.value;
+  const p = FILTER_PRESETS[key];
+  if (!p) return;
+  state.filter.preset = key;
+  state.filter.kernel = [...p.kernel];
+  setKernelInputs(state.filter.kernel);
+  schedulePreview();
+});
+
+els.filterEdge.addEventListener("change", (e) => {
+  if (!state.filter) return;
+  state.filter.edge = e.target.value;
+  schedulePreview();
+});
+
+els.filterPreview.addEventListener("change", (e) => {
+  if (!state.filter) return;
+  state.filter.preview = e.target.checked;
+  if (!state.filter.preview) {
+    cancelFilterJob();
+    setFilterStatus("");
+    rerender();
+  } else {
+    schedulePreview();
+  }
+});
+
+els.filterDialog.querySelectorAll('[data-ch]').forEach((cb) => {
+  cb.addEventListener("change", () => schedulePreview());
+});
+
+populateFilterPresets();
+buildKernelGrid();
+
 els.zoomRange.addEventListener("input", (e) => {
   const pct = parseInt(e.target.value, 10);
   setZoom(pct / 100, { reflectInSlider: false });
@@ -567,6 +799,7 @@ async function handleFile(file) {
     els.saveBtn.disabled = false;
     els.levelsBtn.disabled = false;
     els.resizeBtn.disabled = false;
+    els.filterBtn.disabled = false;
     els.zoomRange.disabled = false;
     setZoom(computeFitZoom());
     setStatus("");
