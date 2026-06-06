@@ -36,6 +36,7 @@
 
     <div class="toolbar-group">
       <button class="btn" id="levels-btn" disabled>Уровни…</button>
+      <button class="btn" id="resize-btn" disabled>Размер…</button>
     </div>
 
     <div class="toolbar-group toolbar-title">
@@ -89,6 +90,12 @@
       <span class="status-value" id="status-format">—</span>
     </div>
     <div class="status-item status-message" id="status-message"></div>
+
+    <div class="status-item zoom-control">
+      <button class="zoom-btn" id="zoom-fit" type="button" title="Подогнать под экран">⤢</button>
+      <input type="range" id="zoom-range" min="12" max="300" step="1" value="100" disabled />
+      <span class="status-value" id="zoom-value">100%</span>
+    </div>
   </footer>
 
   <dialog id="levels-dialog" class="levels-dialog">
@@ -151,6 +158,74 @@
         <button type="button" id="levels-reset">Сброс</button>
         <button type="button" id="levels-cancel">Отмена</button>
         <button type="button" class="btn-primary" id="levels-apply">Применить</button>
+      </div>
+    </div>
+  </dialog>
+
+  <dialog id="resize-dialog" class="levels-dialog resize-dialog">
+    <div class="dialog-header">
+      <h2 class="dialog-title">Изменение размера</h2>
+      <button class="dialog-close" id="resize-close" type="button" aria-label="Закрыть">×</button>
+    </div>
+
+    <div class="dialog-body">
+      <div class="resize-stats">
+        <div class="resize-stat">
+          <span class="resize-stat-label">До</span>
+          <span class="resize-stat-value" id="resize-before">— Mpx</span>
+        </div>
+        <div class="resize-stat-arrow">→</div>
+        <div class="resize-stat">
+          <span class="resize-stat-label">После</span>
+          <span class="resize-stat-value" id="resize-after">— Mpx</span>
+        </div>
+      </div>
+
+      <div class="levels-row">
+        <label class="levels-field">
+          <span>Единицы</span>
+          <select id="resize-unit">
+            <option value="percent">Проценты</option>
+            <option value="pixels">Пиксели</option>
+          </select>
+        </label>
+
+        <label class="levels-field-check">
+          <input type="checkbox" id="resize-lock" checked />
+          Сохранять пропорции
+        </label>
+      </div>
+
+      <div class="levels-row resize-dims">
+        <label class="levels-num">
+          <span>Ширина</span>
+          <input type="number" id="resize-width" step="1" min="1" />
+        </label>
+        <label class="levels-num">
+          <span>Высота</span>
+          <input type="number" id="resize-height" step="1" min="1" />
+        </label>
+      </div>
+
+      <div class="levels-row">
+        <label class="levels-field interp-field">
+          <span>Алгоритм интерполяции</span>
+          <select id="resize-interp">
+            <option value="bilinear">Билинейная</option>
+            <option value="nearest">Ближайший сосед</option>
+          </select>
+          <span class="interp-help" id="resize-interp-help" tabindex="0" aria-label="Описание алгоритма">?</span>
+        </label>
+      </div>
+
+      <p class="interp-description" id="resize-interp-description"></p>
+    </div>
+
+    <div class="dialog-footer">
+      <div class="resize-error" id="resize-error"></div>
+      <div class="dialog-actions">
+        <button type="button" id="resize-cancel">Отмена</button>
+        <button type="button" class="btn-primary" id="resize-apply">Применить</button>
       </div>
     </div>
   </dialog>

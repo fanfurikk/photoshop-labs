@@ -16,6 +16,12 @@ import {
 } from "./levels.js";
 import { drawHistogram } from "./histogram.js";
 import { TripleSlider } from "./tripleSlider.js";
+import { INTERPOLATORS, resize } from "./resize.js";
+import { setupModal, openModal, closeModal } from "./modal.js";
+
+const ZOOM_MIN = 0.12;
+const ZOOM_MAX = 3.0;
+const FIT_PADDING = 50;
 
 const els = {
   fileInput: document.getElementById("file-input"),
@@ -26,6 +32,7 @@ const els = {
   canvas: document.getElementById("canvas"),
   canvasWrap: document.getElementById("canvas-wrap"),
   emptyHint: document.getElementById("empty-hint"),
+  workspace: document.querySelector(".workspace"),
   statusWidth: document.getElementById("status-width"),
   statusHeight: document.getElementById("status-height"),
   statusDepth: document.getElementById("status-depth"),
@@ -48,6 +55,24 @@ const els = {
   numBp: document.getElementById("num-bp"),
   numG: document.getElementById("num-g"),
   numWp: document.getElementById("num-wp"),
+  zoomRange: document.getElementById("zoom-range"),
+  zoomValue: document.getElementById("zoom-value"),
+  zoomFit: document.getElementById("zoom-fit"),
+  resizeBtn: document.getElementById("resize-btn"),
+  resizeDialog: document.getElementById("resize-dialog"),
+  resizeClose: document.getElementById("resize-close"),
+  resizeCancel: document.getElementById("resize-cancel"),
+  resizeApply: document.getElementById("resize-apply"),
+  resizeBefore: document.getElementById("resize-before"),
+  resizeAfter: document.getElementById("resize-after"),
+  resizeUnit: document.getElementById("resize-unit"),
+  resizeLock: document.getElementById("resize-lock"),
+  resizeWidth: document.getElementById("resize-width"),
+  resizeHeight: document.getElementById("resize-height"),
+  resizeInterp: document.getElementById("resize-interp"),
+  resizeInterpHelp: document.getElementById("resize-interp-help"),
+  resizeInterpDescription: document.getElementById("resize-interp-description"),
+  resizeError: document.getElementById("resize-error"),
 };
 
 const FORMAT_LABEL = { png: "PNG", jpg: "JPEG", gb7: "GB7" };
@@ -59,6 +84,9 @@ const state = {
   enabled: defaultEnabled(),
   tool: "hand",
   levels: null,
+  zoom: 1.0,
+  interp: "bilinear",
+  resizeDlg: null,
 };
 
 function setStatus(msg, isError = false) {
@@ -80,7 +108,7 @@ function paintCanvas(rgba, width, height) {
   els.emptyHint.style.display = "none";
 }
 
-function currentSourceRgba() {
+function leveledSourceRgba() {
   if (!state.original) return null;
   if (state.levels && state.levels.preview && !isAllIdentity(state.levels.settings)) {
     return applyLevels(state.original.rgba, state.levels.settings);
@@ -90,13 +118,18 @@ function currentSourceRgba() {
 
 function rerender() {
   if (!state.original) return;
-  const src = currentSourceRgba();
-  const display = buildDisplayRgba(
+  const src = leveledSourceRgba();
+  const filtered = buildDisplayRgba(
     { ...state.original, rgba: src },
     state.layout,
     state.enabled
   );
-  paintCanvas(display, state.original.width, state.original.height);
+  const { width: ow, height: oh } = state.original;
+  const dw = Math.max(1, Math.round(ow * state.zoom));
+  const dh = Math.max(1, Math.round(oh * state.zoom));
+  const display =
+    dw === ow && dh === oh ? filtered : resize(filtered, ow, oh, dw, dh, state.interp);
+  paintCanvas(display, dw, dh);
 }
 
 let pendingRaf = null;
@@ -117,6 +150,23 @@ function updateStatusBar(image) {
     els.statusDepth.textContent = `${image.colorDepth} бит`;
   }
   els.statusFormat.textContent = FORMAT_LABEL[image.format] || image.format;
+}
+
+function setZoom(z, { reflectInSlider = true } = {}) {
+  state.zoom = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, z));
+  const pct = Math.round(state.zoom * 100);
+  els.zoomValue.textContent = `${pct}%`;
+  if (reflectInSlider) els.zoomRange.value = String(pct);
+  scheduleRerender();
+}
+
+function computeFitZoom() {
+  if (!state.original) return 1.0;
+  const w = els.workspace.clientWidth - 2 * FIT_PADDING;
+  const h = els.workspace.clientHeight - 2 * FIT_PADDING;
+  if (w <= 0 || h <= 0) return 1.0;
+  const z = Math.min(w / state.original.width, h / state.original.height, 1.0);
+  return Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, z));
 }
 
 function renderChannelsPanel() {
@@ -170,11 +220,11 @@ function setTool(name) {
 
 function canvasToImagePixel(event) {
   const rect = els.canvas.getBoundingClientRect();
-  const sx = els.canvas.width / rect.width;
-  const sy = els.canvas.height / rect.height;
+  const sx = state.original.width / rect.width;
+  const sy = state.original.height / rect.height;
   const x = Math.floor((event.clientX - rect.left) * sx);
   const y = Math.floor((event.clientY - rect.top) * sy);
-  if (x < 0 || y < 0 || x >= els.canvas.width || y >= els.canvas.height) return null;
+  if (x < 0 || y < 0 || x >= state.original.width || y >= state.original.height) return null;
   return { x, y };
 }
 
@@ -250,7 +300,7 @@ function openLevelsDialog() {
   els.levelsChannel.value = "master";
   els.levelsLog.checked = false;
   els.levelsPreview.checked = true;
-  els.levelsDialog.showModal();
+  openModal(els.levelsDialog);
   requestAnimationFrame(() => {
     applySliderToActiveChannel();
     redrawHistogram();
@@ -259,7 +309,7 @@ function openLevelsDialog() {
 
 function closeLevelsDialog() {
   state.levels = null;
-  els.levelsDialog.close();
+  closeModal(els.levelsDialog);
   rerender();
 }
 
@@ -274,9 +324,11 @@ function applyLevelsToImage() {
   setStatus("Уровни применены");
 }
 
+setupModal(els.levelsDialog, { onClose: closeLevelsDialog });
+
 els.levelsBtn.addEventListener("click", openLevelsDialog);
-els.levelsClose.addEventListener("click", () => closeLevelsDialog());
-els.levelsCancel.addEventListener("click", () => closeLevelsDialog());
+els.levelsClose.addEventListener("click", closeLevelsDialog);
+els.levelsCancel.addEventListener("click", closeLevelsDialog);
 els.levelsApply.addEventListener("click", applyLevelsToImage);
 
 els.levelsReset.addEventListener("click", () => {
@@ -333,19 +385,170 @@ els.numBp.addEventListener("change", () => commitNumberInput("bp"));
 els.numG.addEventListener("change", () => commitNumberInput("g"));
 els.numWp.addEventListener("change", () => commitNumberInput("wp"));
 
-els.levelsDialog.addEventListener("cancel", (e) => {
-  e.preventDefault();
-  closeLevelsDialog();
+function megaPixels(w, h) {
+  return ((w * h) / 1_000_000).toFixed(2);
+}
+
+function fmtPct(n) {
+  return parseFloat(n.toFixed(2)).toString();
+}
+
+function formatDims(w, h, unit) {
+  if (unit === "percent") {
+    return {
+      w: fmtPct((w / state.resizeDlg.srcW) * 100),
+      h: fmtPct((h / state.resizeDlg.srcH) * 100),
+    };
+  }
+  return { w: String(w), h: String(h) };
+}
+
+function parseDim(value, unit, srcDim) {
+  const n = parseFloat(value);
+  if (!Number.isFinite(n) || n <= 0) return null;
+  if (unit === "percent") {
+    if (n > 1000) return null;
+    return Math.max(1, Math.round((n / 100) * srcDim));
+  }
+  if (n > 16384) return null;
+  return Math.max(1, Math.round(n));
+}
+
+function updateResizeStats() {
+  if (!state.resizeDlg) return;
+  const { srcW, srcH, dstW, dstH } = state.resizeDlg;
+  els.resizeBefore.textContent = `${megaPixels(srcW, srcH)} Mpx (${srcW}×${srcH})`;
+  els.resizeAfter.textContent = `${megaPixels(dstW, dstH)} Mpx (${dstW}×${dstH})`;
+}
+
+function refreshResizeDialog({ skipField } = {}) {
+  if (!state.resizeDlg) return;
+  const { dstW, dstH, unit, interp } = state.resizeDlg;
+  const dims = formatDims(dstW, dstH, unit);
+  if (skipField !== "w") els.resizeWidth.value = dims.w;
+  if (skipField !== "h") els.resizeHeight.value = dims.h;
+  els.resizeInterp.value = interp;
+  els.resizeInterpDescription.textContent = INTERPOLATORS[interp].description;
+  els.resizeInterpHelp.title = INTERPOLATORS[interp].description;
+  els.resizeError.textContent = "";
+  updateResizeStats();
+}
+
+function openResizeDialog() {
+  if (!state.original) return;
+  state.resizeDlg = {
+    srcW: state.original.width,
+    srcH: state.original.height,
+    dstW: state.original.width,
+    dstH: state.original.height,
+    unit: "percent",
+    lock: true,
+    interp: state.interp,
+  };
+  els.resizeUnit.value = "percent";
+  els.resizeLock.checked = true;
+  refreshResizeDialog();
+  openModal(els.resizeDialog);
+}
+
+function closeResizeDialog() {
+  state.resizeDlg = null;
+  closeModal(els.resizeDialog);
+}
+
+function applyResizeToImage() {
+  if (!state.resizeDlg || !state.original) return;
+  const { dstW, dstH, interp } = state.resizeDlg;
+  if (dstW < 1 || dstH < 1 || dstW > 16384 || dstH > 16384) {
+    els.resizeError.textContent = "Размеры должны быть в диапазоне 1..16384";
+    return;
+  }
+  if (dstW === state.original.width && dstH === state.original.height) {
+    closeResizeDialog();
+    return;
+  }
+  const resized = resize(
+    state.original.rgba,
+    state.original.width,
+    state.original.height,
+    dstW,
+    dstH,
+    interp
+  );
+  state.original = { ...state.original, rgba: resized, width: dstW, height: dstH };
+  updateStatusBar(state.original);
+  renderChannelsPanel();
+  state.interp = interp;
+  scheduleRerender();
+  closeResizeDialog();
+  setStatus(`Размер изменён: ${dstW}×${dstH} (${INTERPOLATORS[interp].label})`);
+}
+
+setupModal(els.resizeDialog, { onClose: closeResizeDialog });
+
+els.resizeBtn.addEventListener("click", openResizeDialog);
+els.resizeClose.addEventListener("click", closeResizeDialog);
+els.resizeCancel.addEventListener("click", closeResizeDialog);
+els.resizeApply.addEventListener("click", applyResizeToImage);
+
+els.resizeUnit.addEventListener("change", (e) => {
+  if (!state.resizeDlg) return;
+  state.resizeDlg.unit = e.target.value;
+  refreshResizeDialog();
 });
 
-let dialogMouseDownOnBackdrop = false;
-els.levelsDialog.addEventListener("mousedown", (e) => {
-  dialogMouseDownOnBackdrop = e.target === els.levelsDialog;
+els.resizeLock.addEventListener("change", (e) => {
+  if (!state.resizeDlg) return;
+  state.resizeDlg.lock = e.target.checked;
 });
-els.levelsDialog.addEventListener("mouseup", (e) => {
-  const wasOnBackdrop = dialogMouseDownOnBackdrop;
-  dialogMouseDownOnBackdrop = false;
-  if (wasOnBackdrop && e.target === els.levelsDialog) closeLevelsDialog();
+
+els.resizeInterp.addEventListener("change", (e) => {
+  if (!state.resizeDlg) return;
+  state.resizeDlg.interp = e.target.value;
+  refreshResizeDialog();
+});
+
+function onResizeDimInput(which) {
+  if (!state.resizeDlg) return;
+  const dlg = state.resizeDlg;
+  const ratio = dlg.srcW / dlg.srcH;
+  if (which === "w") {
+    const v = parseDim(els.resizeWidth.value, dlg.unit, dlg.srcW);
+    if (v == null) {
+      els.resizeError.textContent = "Некорректная ширина";
+      return;
+    }
+    dlg.dstW = v;
+    if (dlg.lock) dlg.dstH = Math.max(1, Math.round(v / ratio));
+  } else {
+    const v = parseDim(els.resizeHeight.value, dlg.unit, dlg.srcH);
+    if (v == null) {
+      els.resizeError.textContent = "Некорректная высота";
+      return;
+    }
+    dlg.dstH = v;
+    if (dlg.lock) dlg.dstW = Math.max(1, Math.round(v * ratio));
+  }
+  els.resizeError.textContent = "";
+  updateResizeStats();
+  if (dlg.lock) {
+    const dims = formatDims(dlg.dstW, dlg.dstH, dlg.unit);
+    if (which === "w") els.resizeHeight.value = dims.h;
+    else els.resizeWidth.value = dims.w;
+  }
+}
+
+els.resizeWidth.addEventListener("input", () => onResizeDimInput("w"));
+els.resizeHeight.addEventListener("input", () => onResizeDimInput("h"));
+
+els.zoomRange.addEventListener("input", (e) => {
+  const pct = parseInt(e.target.value, 10);
+  setZoom(pct / 100, { reflectInSlider: false });
+});
+
+els.zoomFit.addEventListener("click", () => {
+  if (!state.original) return;
+  setZoom(computeFitZoom());
 });
 
 async function handleFile(file) {
@@ -358,12 +561,14 @@ async function handleFile(file) {
     state.layout = detectLayout(image);
     state.enabled = defaultEnabled();
     els.fileName.textContent = file.name;
-    rerender();
     updateStatusBar(image);
     renderChannelsPanel();
     els.picker.innerHTML = '<p class="panel-hint">Выберите инструмент «Пипетка» и кликните по изображению.</p>';
     els.saveBtn.disabled = false;
     els.levelsBtn.disabled = false;
+    els.resizeBtn.disabled = false;
+    els.zoomRange.disabled = false;
+    setZoom(computeFitZoom());
     setStatus("");
   } catch (err) {
     console.error(err);

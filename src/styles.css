@@ -155,9 +155,6 @@ body {
 
 #canvas {
   display: none;
-  max-width: 100%;
-  max-height: 100%;
-  object-fit: contain;
   box-shadow: 0 0 0 1px var(--border), 0 8px 24px rgba(0, 0, 0, 0.5);
   image-rendering: pixelated;
 }
@@ -494,5 +491,107 @@ body {
   padding: 4px 6px;
   font-size: 13px;
   font-variant-numeric: tabular-nums;
+}
+
+.zoom-control {
+  margin-left: 12px;
+  gap: 8px;
+}
+
+.zoom-btn {
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 3px;
+  font-size: 13px;
+  line-height: 1;
+  padding: 2px 6px;
+  cursor: pointer;
+}
+.zoom-btn:hover { background: rgba(255, 255, 255, 0.22); }
+
+#zoom-range {
+  width: 130px;
+  accent-color: #fff;
+}
+#zoom-range:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.resize-dialog { width: 480px; }
+
+.resize-stats {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  margin-bottom: 14px;
+  padding: 10px;
+  background: var(--bg-elev-2);
+  border-radius: 4px;
+}
+
+.resize-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.resize-stat-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+}
+
+.resize-stat-value {
+  font-size: 14px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.resize-stat-arrow {
+  font-size: 20px;
+  color: var(--text-muted);
+}
+
+.resize-dims input { width: 100%; }
+
+.interp-field {
+  flex: 1;
+  align-items: center;
+}
+.interp-field select { flex: 1; }
+
+.interp-help {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--bg-elev-2);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  font-size: 11px;
+  cursor: help;
+  user-select: none;
+}
+.interp-help:hover { background: var(--accent); color: #fff; border-color: var(--accent); }
+
+.interp-description {
+  margin: 8px 0 0;
+  padding: 8px 10px;
+  background: var(--bg-elev-2);
+  border-left: 3px solid var(--accent);
+  border-radius: 2px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text-muted);
+}
+
+.resize-error {
+  flex: 1;
+  font-size: 12px;
+  color: #ff8a80;
 }
 
