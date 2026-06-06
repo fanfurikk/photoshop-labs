@@ -32,6 +32,12 @@
       <button class="btn tool-btn" data-tool="eyedropper" title="Пипетка — кликните по изображению">💧</button>
     </div>
 
+    <div class="toolbar-sep"></div>
+
+    <div class="toolbar-group">
+      <button class="btn" id="levels-btn" disabled>Уровни…</button>
+    </div>
+
     <div class="toolbar-group toolbar-title">
       <span id="file-name">Файл не выбран</span>
     </div>
@@ -84,6 +90,70 @@
     </div>
     <div class="status-item status-message" id="status-message"></div>
   </footer>
+
+  <dialog id="levels-dialog" class="levels-dialog">
+    <div class="dialog-header">
+      <h2 class="dialog-title">Уровни</h2>
+      <button class="dialog-close" id="levels-close" type="button" aria-label="Закрыть">×</button>
+    </div>
+
+    <div class="dialog-body">
+      <div class="levels-row">
+        <label class="levels-field">
+          <span>Канал</span>
+          <select id="levels-channel">
+            <option value="master">Master (RGB)</option>
+            <option value="R">Red</option>
+            <option value="G">Green</option>
+            <option value="B">Blue</option>
+            <option value="A">Alpha</option>
+          </select>
+        </label>
+
+        <label class="levels-field-check">
+          <input type="checkbox" id="levels-log" />
+          Логарифмическая шкала
+        </label>
+      </div>
+
+      <div class="histogram-block">
+        <canvas id="histogram-canvas" width="512" height="180"></canvas>
+        <div class="triple-slider" id="triple-slider">
+          <div class="triple-track"></div>
+          <div class="triple-thumb thumb-bp" data-handle="bp" title="Точка чёрного"></div>
+          <div class="triple-thumb thumb-g" data-handle="g" title="Гамма (полутона)"></div>
+          <div class="triple-thumb thumb-wp" data-handle="wp" title="Точка белого"></div>
+        </div>
+      </div>
+
+      <div class="levels-row levels-numbers">
+        <label class="levels-num">
+          <span>Точка чёрного</span>
+          <input type="number" id="num-bp" min="0" max="254" step="1" />
+        </label>
+        <label class="levels-num">
+          <span>Гамма</span>
+          <input type="number" id="num-g" min="0.1" max="9.9" step="0.01" />
+        </label>
+        <label class="levels-num">
+          <span>Точка белого</span>
+          <input type="number" id="num-wp" min="1" max="255" step="1" />
+        </label>
+      </div>
+    </div>
+
+    <div class="dialog-footer">
+      <label class="levels-field-check">
+        <input type="checkbox" id="levels-preview" checked />
+        Предпросмотр
+      </label>
+      <div class="dialog-actions">
+        <button type="button" id="levels-reset">Сброс</button>
+        <button type="button" id="levels-cancel">Отмена</button>
+        <button type="button" class="btn-primary" id="levels-apply">Применить</button>
+      </div>
+    </div>
+  </dialog>
 
   <script type="module" src="src/app.js"></script>
 </body>

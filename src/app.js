@@ -8,6 +8,14 @@ import {
   CHANNEL_LABEL,
 } from "./channels.js";
 import { rgbToLab } from "./color.js";
+import {
+  defaultLevelsState,
+  applyLevels,
+  isAllIdentity,
+  computeHistogram,
+} from "./levels.js";
+import { drawHistogram } from "./histogram.js";
+import { TripleSlider } from "./tripleSlider.js";
 
 const els = {
   fileInput: document.getElementById("file-input"),
@@ -26,6 +34,20 @@ const els = {
   channels: document.getElementById("channels"),
   picker: document.getElementById("picker"),
   toolBtns: document.querySelectorAll(".tool-btn"),
+  levelsBtn: document.getElementById("levels-btn"),
+  levelsDialog: document.getElementById("levels-dialog"),
+  levelsClose: document.getElementById("levels-close"),
+  levelsChannel: document.getElementById("levels-channel"),
+  levelsLog: document.getElementById("levels-log"),
+  levelsPreview: document.getElementById("levels-preview"),
+  levelsReset: document.getElementById("levels-reset"),
+  levelsCancel: document.getElementById("levels-cancel"),
+  levelsApply: document.getElementById("levels-apply"),
+  histogramCanvas: document.getElementById("histogram-canvas"),
+  tripleSlider: document.getElementById("triple-slider"),
+  numBp: document.getElementById("num-bp"),
+  numG: document.getElementById("num-g"),
+  numWp: document.getElementById("num-wp"),
 };
 
 const FORMAT_LABEL = { png: "PNG", jpg: "JPEG", gb7: "GB7" };
@@ -36,6 +58,7 @@ const state = {
   layout: null,
   enabled: defaultEnabled(),
   tool: "hand",
+  levels: null,
 };
 
 function setStatus(msg, isError = false) {
@@ -57,10 +80,32 @@ function paintCanvas(rgba, width, height) {
   els.emptyHint.style.display = "none";
 }
 
+function currentSourceRgba() {
+  if (!state.original) return null;
+  if (state.levels && state.levels.preview && !isAllIdentity(state.levels.settings)) {
+    return applyLevels(state.original.rgba, state.levels.settings);
+  }
+  return state.original.rgba;
+}
+
 function rerender() {
   if (!state.original) return;
-  const display = buildDisplayRgba(state.original, state.layout, state.enabled);
+  const src = currentSourceRgba();
+  const display = buildDisplayRgba(
+    { ...state.original, rgba: src },
+    state.layout,
+    state.enabled
+  );
   paintCanvas(display, state.original.width, state.original.height);
+}
+
+let pendingRaf = null;
+function scheduleRerender() {
+  if (pendingRaf != null) return;
+  pendingRaf = requestAnimationFrame(() => {
+    pendingRaf = null;
+    rerender();
+  });
 }
 
 function updateStatusBar(image) {
@@ -160,6 +205,149 @@ function renderPickerInfo(pt, rgb) {
   `;
 }
 
+const tripleSlider = new TripleSlider(els.tripleSlider, (bp, g, wp) => {
+  if (!state.levels) return;
+  const ch = state.levels.channel;
+  state.levels.settings[ch] = { bp, g, wp };
+  syncNumberInputs();
+  if (state.levels.preview) scheduleRerender();
+});
+
+function syncNumberInputs() {
+  els.numBp.value = String(tripleSlider.bp);
+  els.numG.value = tripleSlider.g.toFixed(2);
+  els.numWp.value = String(tripleSlider.wp);
+}
+
+function applySliderToActiveChannel() {
+  if (!state.levels) return;
+  const ch = state.levels.channel;
+  const s = state.levels.settings[ch];
+  tripleSlider.setValues(s.bp, s.g, s.wp);
+  syncNumberInputs();
+}
+
+function redrawHistogram() {
+  if (!state.levels) return;
+  const ch = state.levels.channel;
+  const hist = state.levels.histograms[ch];
+  drawHistogram(els.histogramCanvas, hist, ch, { log: state.levels.log });
+}
+
+function openLevelsDialog() {
+  if (!state.original) return;
+  const histograms = {};
+  for (const c of ["master", "R", "G", "B", "A"]) {
+    histograms[c] = computeHistogram(state.original.rgba, c);
+  }
+  state.levels = {
+    settings: defaultLevelsState(),
+    channel: "master",
+    log: false,
+    preview: true,
+    histograms,
+  };
+  els.levelsChannel.value = "master";
+  els.levelsLog.checked = false;
+  els.levelsPreview.checked = true;
+  els.levelsDialog.showModal();
+  requestAnimationFrame(() => {
+    applySliderToActiveChannel();
+    redrawHistogram();
+  });
+}
+
+function closeLevelsDialog() {
+  state.levels = null;
+  els.levelsDialog.close();
+  rerender();
+}
+
+function applyLevelsToImage() {
+  if (!state.levels || !state.original) return;
+  if (!isAllIdentity(state.levels.settings)) {
+    const out = applyLevels(state.original.rgba, state.levels.settings);
+    state.original = { ...state.original, rgba: out };
+    renderChannelsPanel();
+  }
+  closeLevelsDialog();
+  setStatus("Уровни применены");
+}
+
+els.levelsBtn.addEventListener("click", openLevelsDialog);
+els.levelsClose.addEventListener("click", () => closeLevelsDialog());
+els.levelsCancel.addEventListener("click", () => closeLevelsDialog());
+els.levelsApply.addEventListener("click", applyLevelsToImage);
+
+els.levelsReset.addEventListener("click", () => {
+  if (!state.levels) return;
+  state.levels.settings = defaultLevelsState();
+  applySliderToActiveChannel();
+  if (state.levels.preview) scheduleRerender();
+});
+
+els.levelsChannel.addEventListener("change", (e) => {
+  if (!state.levels) return;
+  state.levels.channel = e.target.value;
+  applySliderToActiveChannel();
+  redrawHistogram();
+});
+
+els.levelsLog.addEventListener("change", (e) => {
+  if (!state.levels) return;
+  state.levels.log = e.target.checked;
+  redrawHistogram();
+});
+
+els.levelsPreview.addEventListener("change", (e) => {
+  if (!state.levels) return;
+  state.levels.preview = e.target.checked;
+  rerender();
+});
+
+function commitNumberInput(which) {
+  if (!state.levels) return;
+  const ch = state.levels.channel;
+  const s = state.levels.settings[ch];
+  let bp = s.bp, g = s.g, wp = s.wp;
+  if (which === "bp") {
+    const v = parseInt(els.numBp.value, 10);
+    if (!Number.isFinite(v)) return;
+    bp = Math.max(0, Math.min(wp - 1, v));
+  } else if (which === "wp") {
+    const v = parseInt(els.numWp.value, 10);
+    if (!Number.isFinite(v)) return;
+    wp = Math.max(bp + 1, Math.min(255, v));
+  } else if (which === "g") {
+    const v = parseFloat(els.numG.value);
+    if (!Number.isFinite(v)) return;
+    g = Math.max(0.1, Math.min(9.9, v));
+  }
+  state.levels.settings[ch] = { bp, g, wp };
+  tripleSlider.setValues(bp, g, wp);
+  syncNumberInputs();
+  if (state.levels.preview) scheduleRerender();
+}
+
+els.numBp.addEventListener("change", () => commitNumberInput("bp"));
+els.numG.addEventListener("change", () => commitNumberInput("g"));
+els.numWp.addEventListener("change", () => commitNumberInput("wp"));
+
+els.levelsDialog.addEventListener("cancel", (e) => {
+  e.preventDefault();
+  closeLevelsDialog();
+});
+
+let dialogMouseDownOnBackdrop = false;
+els.levelsDialog.addEventListener("mousedown", (e) => {
+  dialogMouseDownOnBackdrop = e.target === els.levelsDialog;
+});
+els.levelsDialog.addEventListener("mouseup", (e) => {
+  const wasOnBackdrop = dialogMouseDownOnBackdrop;
+  dialogMouseDownOnBackdrop = false;
+  if (wasOnBackdrop && e.target === els.levelsDialog) closeLevelsDialog();
+});
+
 async function handleFile(file) {
   if (!file) return;
   setStatus("Загрузка…");
@@ -175,6 +363,7 @@ async function handleFile(file) {
     renderChannelsPanel();
     els.picker.innerHTML = '<p class="panel-hint">Выберите инструмент «Пипетка» и кликните по изображению.</p>';
     els.saveBtn.disabled = false;
+    els.levelsBtn.disabled = false;
     setStatus("");
   } catch (err) {
     console.error(err);
