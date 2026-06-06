@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Image Viewer — GB7 / PNG / JPG</title>
+  <link rel="stylesheet" href="src/styles.css" />
+</head>
+<body>
+  <header class="toolbar">
+    <div class="toolbar-group">
+      <label class="btn btn-primary">
+        <input type="file" id="file-input" accept=".png,.jpg,.jpeg,.gb7,image/png,image/jpeg" hidden />
+        <span>Открыть</span>
+      </label>
+
+      <div class="dropdown">
+        <button class="btn" id="save-btn" disabled>Сохранить ▾</button>
+        <ul class="dropdown-menu" id="save-menu">
+          <li data-format="png">PNG</li>
+          <li data-format="jpg">JPG</li>
+          <li data-format="gb7">GB7 (без маски)</li>
+          <li data-format="gb7-mask">GB7 (с маской)</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="toolbar-group toolbar-title">
+      <span id="file-name">Файл не выбран</span>
+    </div>
+  </header>
+
+  <main class="workspace">
+    <div class="canvas-wrap" id="canvas-wrap">
+      <canvas id="canvas"></canvas>
+      <div class="empty-hint" id="empty-hint">
+        Перетащите изображение сюда или нажмите «Открыть».<br />
+        Поддерживаются: PNG, JPG, GB7.
+      </div>
+    </div>
+  </main>
+
+  <footer class="statusbar">
+    <div class="status-item">
+      <span class="status-label">Ширина:</span>
+      <span class="status-value" id="status-width">—</span>
+    </div>
+    <div class="status-item">
+      <span class="status-label">Высота:</span>
+      <span class="status-value" id="status-height">—</span>
+    </div>
+    <div class="status-item">
+      <span class="status-label">Глубина цвета:</span>
+      <span class="status-value" id="status-depth">—</span>
+    </div>
+    <div class="status-item">
+      <span class="status-label">Формат:</span>
+      <span class="status-value" id="status-format">—</span>
+    </div>
+    <div class="status-item status-message" id="status-message"></div>
+  </footer>
+
+  <script type="module" src="src/app.js"></script>
+</body>
+</html>
