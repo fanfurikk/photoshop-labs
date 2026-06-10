@@ -19,6 +19,29 @@ function detectFormat(file) {
   return null;
 }
 
+const PNG_SIGNATURE = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
+const PNG_CHANNELS = { 0: 1, 2: 3, 4: 2, 6: 4 };
+
+function pngColorDepth(buffer) {
+  const view = new DataView(buffer);
+  if (buffer.byteLength < 26) return null;
+  for (let i = 0; i < 8; i++) {
+    if (view.getUint8(i) !== PNG_SIGNATURE[i]) return null;
+  }
+  if (
+    view.getUint8(12) !== 0x49 || view.getUint8(13) !== 0x48 ||
+    view.getUint8(14) !== 0x44 || view.getUint8(15) !== 0x52
+  ) {
+    return null;
+  }
+  const bitDepth = view.getUint8(24);
+  const colorType = view.getUint8(25);
+  if (colorType === 3) return bitDepth;
+  const channels = PNG_CHANNELS[colorType];
+  if (!channels) return null;
+  return bitDepth * channels;
+}
+
 async function decodeBrowserImage(blob) {
   let bitmap;
   try {
@@ -64,13 +87,20 @@ export async function loadImage(file) {
     return { width, height, rgba, format: "gb7", colorDepth, hasMask };
   }
 
+  let colorDepth = format === "jpg" ? 24 : 32;
+  if (format === "png") {
+    const buf = await readAsArrayBuffer(file);
+    const depth = pngColorDepth(buf);
+    if (depth != null) colorDepth = depth;
+  }
+
   const { width, height, rgba } = await decodeBrowserImage(file);
   return {
     width,
     height,
     rgba,
     format,
-    colorDepth: format === "jpg" ? 24 : 32,
+    colorDepth,
     hasMask: false,
   };
 }
