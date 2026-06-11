@@ -22,7 +22,7 @@ import { PRESETS as FILTER_PRESETS, startConvolution } from "./filter.js";
 
 const ZOOM_MIN = 0.12;
 const ZOOM_MAX = 3.0;
-const FIT_PADDING = 50;
+const FIT_PADDING = 0;
 
 const els = {
   fileInput: document.getElementById("file-input"),
@@ -97,6 +97,7 @@ const state = {
   tool: "hand",
   levels: null,
   zoom: 1.0,
+  fitMode: false,
   interp: "bilinear",
   resizeDlg: null,
   filter: null,
@@ -181,7 +182,7 @@ function computeFitZoom() {
   const w = els.workspace.clientWidth - 2 * FIT_PADDING;
   const h = els.workspace.clientHeight - 2 * FIT_PADDING;
   if (w <= 0 || h <= 0) return 1.0;
-  const z = Math.min(w / state.original.width, h / state.original.height, 1.0);
+  const z = Math.min(w / state.original.width, h / state.original.height);
   return Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, z));
 }
 
@@ -796,12 +797,24 @@ buildKernelGrid();
 
 els.zoomRange.addEventListener("input", (e) => {
   const pct = parseInt(e.target.value, 10);
+  state.fitMode = false;
   setZoom(pct / 100, { reflectInSlider: false });
 });
 
 els.zoomFit.addEventListener("click", () => {
   if (!state.original) return;
+  state.fitMode = true;
   setZoom(computeFitZoom());
+});
+
+let resizeRaf = null;
+window.addEventListener("resize", () => {
+  if (!state.original || !state.fitMode) return;
+  if (resizeRaf != null) return;
+  resizeRaf = requestAnimationFrame(() => {
+    resizeRaf = null;
+    setZoom(computeFitZoom());
+  });
 });
 
 async function handleFile(file) {
@@ -822,6 +835,7 @@ async function handleFile(file) {
     els.resizeBtn.disabled = false;
     els.filterBtn.disabled = false;
     els.zoomRange.disabled = false;
+    state.fitMode = true;
     setZoom(computeFitZoom());
     setStatus("");
   } catch (err) {
