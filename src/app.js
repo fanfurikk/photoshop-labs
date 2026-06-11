@@ -300,6 +300,26 @@ function redrawHistogram() {
   drawHistogram(els.histogramCanvas, hist, ch, { log: state.levels.log });
 }
 
+function levelsChannelsForLayout(layout) {
+  switch (layout) {
+    case "Y": return [["master", "Grayscale"]];
+    case "YA": return [["master", "Grayscale"], ["A", "Alpha"]];
+    case "RGB": return [["master", "Master (RGB)"], ["R", "Red"], ["G", "Green"], ["B", "Blue"]];
+    case "RGBA": return [["master", "Master (RGB)"], ["R", "Red"], ["G", "Green"], ["B", "Blue"], ["A", "Alpha"]];
+    default: return [["master", "Master (RGB)"]];
+  }
+}
+
+function populateLevelsChannels(layout) {
+  els.levelsChannel.innerHTML = "";
+  for (const [value, label] of levelsChannelsForLayout(layout)) {
+    const opt = document.createElement("option");
+    opt.value = value;
+    opt.textContent = label;
+    els.levelsChannel.appendChild(opt);
+  }
+}
+
 function openLevelsDialog() {
   if (!state.original) return;
   const histograms = {};
@@ -313,6 +333,7 @@ function openLevelsDialog() {
     preview: true,
     histograms,
   };
+  populateLevelsChannels(state.layout);
   els.levelsChannel.value = "master";
   els.levelsLog.checked = false;
   els.levelsPreview.checked = true;
