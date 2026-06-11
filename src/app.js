@@ -628,6 +628,42 @@ function getEnabledFilterChannels() {
   return out;
 }
 
+function filterChannelsForLayout(layout) {
+  switch (layout) {
+    case "Y": return [["Y", "Y", true]];
+    case "YA": return [["Y", "Y", true], ["A", "A", false]];
+    case "RGB": return [["R", "R", true], ["G", "G", true], ["B", "B", true]];
+    case "RGBA": return [["R", "R", true], ["G", "G", true], ["B", "B", true], ["A", "A", false]];
+    default: return [["R", "R", true], ["G", "G", true], ["B", "B", true], ["A", "A", false]];
+  }
+}
+
+function populateFilterChannels(layout) {
+  const row = els.filterDialog.querySelector(".filter-channels-row");
+  row.querySelectorAll("label").forEach((l) => l.remove());
+  for (const [ch, label, checked] of filterChannelsForLayout(layout)) {
+    const lab = document.createElement("label");
+    lab.className = "levels-field-check";
+    const cb = document.createElement("input");
+    cb.type = "checkbox";
+    cb.dataset.ch = ch;
+    cb.checked = checked;
+    cb.addEventListener("change", () => schedulePreview());
+    lab.appendChild(cb);
+    lab.appendChild(document.createTextNode(label));
+    row.appendChild(lab);
+  }
+}
+
+function expandFilterChannels(channels) {
+  const out = [];
+  for (const c of channels) {
+    if (c === "Y") out.push("R", "G", "B");
+    else out.push(c);
+  }
+  return out;
+}
+
 function setFilterStatus(msg, busy = false) {
   els.filterStatus.textContent = msg || "";
   els.filterStatus.classList.toggle("busy", busy);
@@ -662,7 +698,7 @@ function schedulePreview() {
   const { width, height, rgba } = state.original;
   const kernel = state.filter.kernel.slice();
   const edge = state.filter.edge;
-  filterJob = startConvolution(rgba, width, height, kernel, channels, edge, {
+  filterJob = startConvolution(rgba, width, height, kernel, expandFilterChannels(channels), edge, {
     onProgress: (p) => {
       setFilterStatus(`Вычисление… ${Math.round(p * 100)}%`, true);
     },
@@ -687,9 +723,7 @@ function openFilterDialog() {
   els.filterPreset.value = "identity";
   els.filterEdge.value = "copy";
   els.filterPreview.checked = true;
-  els.filterDialog.querySelectorAll('[data-ch]').forEach((cb) => {
-    cb.checked = cb.dataset.ch !== "A";
-  });
+  populateFilterChannels(state.layout);
   setKernelInputs(state.filter.kernel);
   setFilterStatus("");
   openModal(els.filterDialog);
@@ -711,6 +745,15 @@ function applyFilterToImage() {
     setFilterStatus("Не выбран ни один канал");
     return;
   }
+
+  if (state.filter.preview && state.filter.cached && !filterJob) {
+    state.original = { ...state.original, rgba: state.filter.cached };
+    renderChannelsPanel();
+    closeFilterDialog();
+    setStatus("Фильтр применён");
+    return;
+  }
+
   els.filterApply.disabled = true;
   els.filterReset.disabled = true;
   els.filterCancel.disabled = true;
@@ -722,7 +765,7 @@ function applyFilterToImage() {
   const kernel = state.filter.kernel.slice();
   const edge = state.filter.edge;
 
-  filterJob = startConvolution(rgba, width, height, kernel, channels, edge, {
+  filterJob = startConvolution(rgba, width, height, kernel, expandFilterChannels(channels), edge, {
     onProgress: (p) => setFilterStatus(`Применение… ${Math.round(p * 100)}%`, true),
     onDone: (out) => {
       filterJob = null;
@@ -752,9 +795,7 @@ els.filterReset.addEventListener("click", () => {
   state.filter.edge = "copy";
   els.filterPreset.value = "identity";
   els.filterEdge.value = "copy";
-  els.filterDialog.querySelectorAll('[data-ch]').forEach((cb) => {
-    cb.checked = cb.dataset.ch !== "A";
-  });
+  populateFilterChannels(state.layout);
   setKernelInputs(state.filter.kernel);
   schedulePreview();
 });
@@ -786,10 +827,6 @@ els.filterPreview.addEventListener("change", (e) => {
   } else {
     schedulePreview();
   }
-});
-
-els.filterDialog.querySelectorAll('[data-ch]').forEach((cb) => {
-  cb.addEventListener("change", () => schedulePreview());
 });
 
 populateFilterPresets();
